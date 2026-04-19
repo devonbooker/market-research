@@ -70,3 +70,22 @@ func TestFetchSubredditNew_CapsAtLimit(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, docs, 1)
 }
+
+func TestFetchTopComments_ReturnsTopNSkippingMoreKind(t *testing.T) {
+	srv := serveFixture(t, "testdata/comments.json")
+	defer srv.Close()
+
+	c := New(Config{
+		ClientID: "c", ClientSecret: "s", UserAgent: "ua",
+		AuthURL: srv.URL + "/api/v1/access_token", APIBaseURL: srv.URL,
+		RateLimit: 100,
+	})
+
+	replies, err := FetchTopComments(context.Background(), c, "p1", 10)
+	require.NoError(t, err)
+	require.Len(t, replies, 2)
+	assert.Equal(t, "c1", replies[0].PlatformID)
+	assert.Equal(t, "Same problem here, tried X and Y and nothing works.", replies[0].Body)
+	assert.Equal(t, "alice", replies[0].Author)
+	assert.Equal(t, 25, replies[0].Score)
+}

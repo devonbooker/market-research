@@ -1,0 +1,39 @@
+[
+  {
+    "data": {
+      "children": [
+        { "kind": "t3", "data": { "id": "p1", "title": "ignored" } }
+      ]
+    }
+  },
+  {
+    "data": {
+      "children": [
+        {
+          "kind": "t1",
+          "data": {
+            "id": "c1",
+            "body": "Same problem here, tried X and Y and nothing works.",
+            "author": "alice",
+            "score": 25,
+            "created_utc": 1713000500
+          }
+        },
+        {
+          "kind": "t1",
+          "data": {
+            "id": "c2",
+            "body": "We switched to Z last month.",
+            "author": "bob",
+            "score": 12,
+            "created_utc": 1713000800
+          }
+        },
+        {
+          "kind": "more",
+          "data": { "children": ["c3", "c4"] }
+        }
+      ]
+    }
+  }
+]

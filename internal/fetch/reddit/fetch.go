@@ -101,3 +101,50 @@ func isExternalURL(s string) bool {
 	// permalinks start with "/r/", external URLs are absolute.
 	return len(s) >= 4 && s[:4] == "http"
 }
+
+type commentChild struct {
+	Kind string `json:"kind"`
+	Data struct {
+		ID         string  `json:"id"`
+		Body       string  `json:"body"`
+		Author     string  `json:"author"`
+		Score      int     `json:"score"`
+		CreatedUTC float64 `json:"created_utc"`
+	} `json:"data"`
+}
+
+type commentsPage struct {
+	Data struct {
+		Children []commentChild `json:"children"`
+	} `json:"data"`
+}
+
+// FetchTopComments returns at most `limit` top-sorted comments for the given post ID.
+// Reddit's comments endpoint returns [postListing, commentListing]. We only read the second.
+func FetchTopComments(ctx context.Context, c *Client, postID string, limit int) ([]*types.Reply, error) {
+	path := fmt.Sprintf("/comments/%s.json?limit=%d&sort=top", url.PathEscape(postID), limit)
+	var resp []commentsPage
+	if err := c.GetJSON(ctx, path, &resp); err != nil {
+		return nil, err
+	}
+	if len(resp) < 2 {
+		return nil, nil
+	}
+	out := make([]*types.Reply, 0, limit)
+	for _, ch := range resp[1].Data.Children {
+		if ch.Kind != "t1" {
+			continue // skip 'more' and other kinds
+		}
+		out = append(out, &types.Reply{
+			PlatformID: ch.Data.ID,
+			Body:       ch.Data.Body,
+			Author:     ch.Data.Author,
+			Score:      ch.Data.Score,
+			CreatedAt:  time.Unix(int64(ch.Data.CreatedUTC), 0).UTC(),
+		})
+		if len(out) >= limit {
+			break
+		}
+	}
+	return out, nil
+}
