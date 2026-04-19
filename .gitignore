@@ -1,6 +1,6 @@
-# Binaries
-mr
-mr.exe
+# Binaries (root-anchored so they don't match cmd/mr/ directory)
+/mr
+/mr.exe
 *.test
 *.out
 
