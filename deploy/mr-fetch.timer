@@ -1,0 +1,11 @@
+[Unit]
+Description=market-research daily fetch (04:00 UTC)
+
+[Timer]
+OnCalendar=*-*-* 04:00:00 UTC
+Persistent=true
+RandomizedDelaySec=300
+Unit=mr-fetch.service
+
+[Install]
+WantedBy=timers.target

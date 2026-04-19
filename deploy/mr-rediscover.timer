@@ -1,0 +1,11 @@
+[Unit]
+Description=market-research weekly rediscovery (Sun 03:00 UTC)
+
+[Timer]
+OnCalendar=Sun *-*-* 03:00:00 UTC
+Persistent=true
+RandomizedDelaySec=600
+Unit=mr-rediscover.service
+
+[Install]
+WantedBy=timers.target

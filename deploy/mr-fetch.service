@@ -1,0 +1,17 @@
+[Unit]
+Description=market-research daily fetch
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=mr
+Group=mr
+EnvironmentFile=/etc/mr/env
+ExecStart=/usr/local/bin/mr fetch --all
+Nice=10
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/mr
+NoNewPrivileges=true
+PrivateTmp=true
