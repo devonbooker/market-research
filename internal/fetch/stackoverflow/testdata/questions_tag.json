@@ -1,0 +1,29 @@
+{
+  "items": [
+    {
+      "question_id": 12345,
+      "title": "How to pass SOC2 audit evidence?",
+      "body": "We need to collect evidence continuously...",
+      "owner": { "display_name": "alice" },
+      "score": 7,
+      "view_count": 123,
+      "tags": ["soc2", "compliance"],
+      "link": "https://stackoverflow.com/questions/12345",
+      "creation_date": 1713000000,
+      "is_answered": true,
+      "accepted_answer_id": 99999
+    },
+    {
+      "question_id": 12346,
+      "title": "No accepted answer question",
+      "body": "…",
+      "owner": { "display_name": "bob" },
+      "score": 3,
+      "view_count": 50,
+      "tags": ["compliance"],
+      "link": "https://stackoverflow.com/questions/12346",
+      "creation_date": 1713000100,
+      "is_answered": false
+    }
+  ]
+}

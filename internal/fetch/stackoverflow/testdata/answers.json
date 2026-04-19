@@ -1,0 +1,13 @@
+{
+  "items": [
+    {
+      "answer_id": 99999,
+      "question_id": 12345,
+      "body": "We built a cron job that collects evidence from cloudtrail...",
+      "owner": { "display_name": "charlie" },
+      "score": 18,
+      "is_accepted": true,
+      "creation_date": 1713001000
+    }
+  ]
+}
