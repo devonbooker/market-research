@@ -1,6 +1,6 @@
 # Market Research System - Data Collection Layer
 
-**Status:** WIP (Sections 1-4 finalized; Sections 5-6 pending)
+**Status:** Approved - ready for implementation planning
 **Date:** 2026-04-18
 **Scope:** Subsystem #1 of 5 in the broader market-research agentic system.
 
@@ -46,8 +46,8 @@ This spec covers **only** subsystem #1. Downstream subsystems are addressed at t
 Single Go binary `mr` deployed to a small VM, orchestrated by systemd. All state lives in one SQLite file. Four internal packages, each with one job:
 
 ```
-mr (binary)
-├── cmd/              CLI entrypoints (cobra): topic, fetch, rediscover
+market-research/
+├── cmd/mr/           main.go + CLI entrypoints (cobra): topic, fetch, rediscover, doctor
 ├── internal/store/   SQLite access. Owns schema. Only package that writes SQL.
 ├── internal/sources/ Source-discovery agent. Calls Claude API with the topic,
 │                     produces a SourcePlan (subreddits, SO tags, search queries).
@@ -254,13 +254,107 @@ for each active topic:
 
 ## Section 5 - Observability and System-Level Error Handling
 
-_TBD - to be finalized in follow-up commit._
+The `fetch_runs` table gives per-run visibility inside the DB, but that alone is not enough: if the binary fails to start (bad env file, DB locked, panic at init) there is no row to read. Observability must survive process failure.
+
+**Three layers, cheapest first:**
+
+**1) systemd + journald (free, on the VM)**
+
+- `mr-fetch.service` and `mr-rediscover.service` write stdout/stderr to journald automatically.
+- Structured logs via `log/slog` with the JSON handler. `journalctl -u mr-fetch -o json` gives queryable history.
+- Exit codes are meaningful: `0` success, `1` partial (some sources errored), `2` fatal (no runs completed).
+- `OnFailure=` hook triggers a `mr-notify@.service` unit on exit code 2. Hook wired now; notifier deferred.
+
+**2) Self-diagnostic CLI (`mr doctor`)**
+
+Single command that reports health without external tooling. Reports:
+
+- Last successful `fetch_runs` per topic per platform (and how long ago).
+- Sources with no successful fetch in >7 days.
+- Topics with zero documents in the last 14 days (likely dead source plan).
+- API key validity via lightweight probes: Reddit `/api/v1/me`, Stack Exchange `/me`, Anthropic 1-token `/v1/messages`.
+- SQLite file size, free pages, last VACUUM timestamp.
+
+Intended usage: `ssh vm mr doctor`, or wire to a weekly cron that emails the output.
+
+**3) External alerting (deferred to v1.1)**
+
+The `OnFailure=` systemd hook is wired in v1. The notifier implementation (email, Telegram, ntfy.sh) is deliberately deferred until the system has run long enough to reveal which alerts matter. Shipping alerting before knowing the signal-to-noise ratio leads to alert fatigue and custom filtering later.
+
+**Panic and unexpected-error discipline:**
+
+- Top-level `recover()` in `main()` logs the panic with full stack via `slog`, marks any open `fetch_runs` row as `status='error'` with the panic message, exits with code 2.
+- `defer` pattern used per topic-loop iteration so one topic's panic does not abort the whole daily run.
+
+**Claude API failure modes:**
+
+- `rediscover` failure: sources untouched (last good plan remains active), failure logged loudly in `fetch_runs`, next weekly run retries.
+- `topic add` failure: topic row is created with `active = 0`. User can re-run `mr topic rediscover <name>` manually.
 
 ---
 
 ## Section 6 - Testing Approach
 
-_TBD - to be finalized in follow-up commit._
+Four layers of tests, ordered by how much code they cover per unit of cost, plus one end-to-end smoke test.
+
+**1) Unit tests (`*_test.go` next to source)**
+
+- Source plan validation (caps, dedup, manual-source immutability).
+- Rate-limiter wrapping under load (fake clock).
+- Platform-metadata JSON marshaling.
+- Signal-score heuristic math.
+- CLI flag parsing in `cmd/`.
+
+**2) Store integration tests (real SQLite, no mocks)**
+
+Integration tests hit a real database, never a mock. Each test spins up a fresh `:memory:` SQLite (or a temp file for WAL-mode tests), runs schema migrations, exercises `internal/store/` directly. Covers:
+
+- Migrations apply cleanly on empty and populated DBs.
+- `UNIQUE(platform, platform_id)` dedup behavior.
+- Upsert semantics under concurrent writes (SQLite WAL mode).
+- `fetch_runs` state transitions (running → success/error).
+- Foreign-key cascade on topic deletion.
+
+**3) Platform client tests (`httptest.Server` fixtures)**
+
+`internal/fetch/reddit` and `internal/fetch/stackoverflow` are tested against in-process HTTP servers returning recorded JSON responses. No live API calls, no flakiness, no rate-limit concerns.
+
+Fixtures live in `internal/fetch/testdata/` as real Reddit/SO response payloads captured once and scrubbed of user data. When platforms change schemas, fixtures get re-recorded. Covers:
+
+- Pagination edge cases (empty, partial, deleted-content markers).
+- 429 backoff and retry behavior.
+- Permanent-error source deactivation (403, 404).
+- Malformed JSON handling.
+
+**4) Agent tests (interface stub, no live Claude calls)**
+
+`internal/sources/` takes a `ClaudeClient` interface, not the concrete `anthropic.Client`. Tests inject a stub returning canned tool-call responses. No LLM calls in CI, no cost, fully deterministic. Covers:
+
+- Tool-call schema validation (invalid agent output → typed error).
+- Cap enforcement (agent returns 20 subreddits → system trims to 10).
+- Manual-source immutability during rediscovery.
+- Signal-score recalculation inputs match prompt requirements.
+
+**5) One end-to-end smoke test**
+
+`cmd/mr/e2e_test.go` exercises the full pipeline once with:
+
+- Real SQLite (temp file).
+- Stubbed Claude client (canned SourcePlan).
+- Stubbed Reddit + Stack Overflow servers (`httptest`).
+- Single topic, single source per platform.
+
+Asserts: `mr topic add` → `mr fetch` → documents in DB, replies in DB, `fetch_runs` closed success. Only test that exercises `cmd/` wiring end-to-end. Runs in under 2 seconds.
+
+**Explicitly NOT doing:**
+
+- Mocks for SQLite. Real DB always.
+- Live Reddit / Stack Overflow / Claude calls in CI. Deterministic fixtures only.
+- Coverage targets. Cover what matters (store, fetch, sources). Skip glue code.
+
+**CI:**
+
+GitHub Actions workflow runs `go test ./... -race` on every push. No secrets in CI for v1 (no live-API tests). Nightly live-API smoke tests are a future add once fixture-drift rate is understood.
 
 ---
 
@@ -292,6 +386,7 @@ Additive changes (new columns, new tables) are safe.
 
 ## Open Questions and Future Work
 
-- Sections 5 and 6 to be finalized before implementation begins.
-- Google Trends and X ingestion deferred to future specs; when added, they slot into the existing `documents` table via new platform values.
-- Full-text search over `documents` likely needed by downstream; SQLite FTS5 is the planned add (scoped as a separate follow-up, not v1 of this layer).
+- External alerting notifier (Section 5, layer 3) deferred to v1.1 once alert signal-to-noise is known.
+- Google Trends and X ingestion deferred to future specs. When added they slot into the existing `documents` table via new platform values.
+- Full-text search over `documents` is likely needed by downstream consumers. SQLite FTS5 is the planned add, scoped as a separate follow-up, not v1 of this layer.
+- Nightly live-API smoke tests deferred until fixture-drift rate is understood.
