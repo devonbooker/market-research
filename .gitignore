@@ -1,0 +1,45 @@
+# Binaries
+mr
+mr.exe
+*.test
+*.out
+
+# Build artifacts
+/bin/
+/dist/
+
+# Go workspace
+go.work
+go.work.sum
+
+# Dependency vendoring
+/vendor/
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Secrets and local config
+.env
+.env.local
+/etc/mr/env
+*.pem
+*.key
+
+# SQLite runtime state (never commit corpus data)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+/data/
+
+# Logs
+*.log
+/logs/
+
+# Coverage
+coverage.out
+coverage.html
